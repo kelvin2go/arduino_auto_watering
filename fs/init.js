@@ -4,7 +4,7 @@ load('api_gpio.js');
 load('api_math.js');
 load("api_adc.js");
 load('api_sys.js');
-// mos config-set blynk.auth={TOKEN}
+// mos config-set blynk.auth=59294d87d6724e77941231f86ee39204
 let Current_moist_lvl = 0; // the latest reading of moist
 let debug = 1;
 let bk = {
@@ -87,17 +87,18 @@ let Watering = {
 let flow = {
   WATER_LEVEL: 50,
   GREEN_LEVEL: 80,
+  error_count: 0,
   _init: function(){
     GPIO.set_mode(Watering.RELAY_1, GPIO.MODE_OUTPUT);
+    flow.start();
   },
   start: function(){
-    let mosit_level = SoilSensor.read();
-    dPrint('*** mosit level: ', mosit_level, '%');
-    if (Watering.TIMER_ON === 1 ) {
-      dPrint("TIMER ON block flow.start");
+    if (Watering.TIMER_ON === 1){
+      dPrint('TIMER ON');
       return;
     }
-
+    let mosit_level = SoilSensor.read();
+    dPrint('*** mosit level: ', mosit_level, '%');
     if (mosit_level > this.GREEN_LEVEL){
       // Blynk.virtualWrite(conn, bk.LED, bk.BLYNK_GREEN );
       dPrint('Green >  ', this.GREEN_LEVEL);
@@ -107,8 +108,16 @@ let flow = {
       dPrint('Yellow >  ', this.WATER_LEVEL);
       Watering.start();
     } else {
-      dPrint('something wrong! ', mosit_level);
+      dPrint('count',flow.error_count);
+      dPrint('Something wrong! ', mosit_level);
       Watering.stop();
+    }
+    if (Current_moist_lvl === SoilSensor.MAX) {
+      flow.error_count++;
+      if (flow.error_count % 10 === 0){
+        Watering.start();
+        flow.error_count = 0;
+      }
     }
     return;
   }
@@ -133,7 +142,7 @@ Blynk.setHandler(function(conn, cmd, pin, val, id) {
   } else if (cmd === 'vw') {
     // Writing to virtual pin translate to writing to physical pin
     GPIO.set_mode(pin, GPIO.MODE_OUTPUT);
-    Watering.start()
+    Watering.start();
     GPIO.write(pin, val);
   }
   dPrint('BLYNK JS handler ', cmd, id, pin, val);
@@ -142,6 +151,6 @@ Blynk.setHandler(function(conn, cmd, pin, val, id) {
 
 flow._init();
 
-Timer.set(2000 /* milliseconds */, true /* repeat */, function() {
+Timer.set(20000 /* milliseconds */, true /* repeat */, function() {
   flow.start();
 }, null);
